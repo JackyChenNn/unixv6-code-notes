@@ -333,7 +333,10 @@ fork()
 {
 	register struct proc *p1, *p2;
 
+	//将p1指向父进程的proc结构体
 	p1 = u.u_procp;
+	//从起始位置遍历proc[]寻找未使用的元素，找到后
+	//将p2指向该元素，然后跳转到found。
 	for(p2 = &proc[0]; p2 < &proc[NPROC]; p2++)
 		if(p2->p_stat == NULL)
 			goto found;
@@ -341,6 +344,7 @@ fork()
 	goto out;
 
 found:
+	// 找到未使用的元素后，调用newproc()生成新的进程。
 	if(newproc()) {
 		u.u_ar0[R0] = p1->p_pid;
 		u.u_cstime[0] = 0;
