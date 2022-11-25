@@ -1,4 +1,4 @@
-# unixv6-code-notes
+# Unixv6 Souce Code Notes
 This is the reading notes of UnixV6 source code, which is the Final Project of course SE352.
 
 # UNIX 6th Edition Kernel Source Code
