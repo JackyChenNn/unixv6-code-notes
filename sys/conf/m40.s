@@ -810,7 +810,7 @@ cret:
 	mov	(sp)+,r5
 	rts	pc
 
-.globl	_u
+.globl	_u	/ through u to access the excuted process's structor user
 _u	= 140000
 usize	= 16.
 

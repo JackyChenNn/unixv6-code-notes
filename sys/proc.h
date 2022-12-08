@@ -8,14 +8,14 @@
  */
 struct	proc
 {
-	char	p_stat;
-	char	p_flag;
+	char	p_stat;		/* state, if equal to NULL means this element in proc[] is empty, defined as below. */
+	char	p_flag;		/* flag codes, defined as below. */
 	char	p_pri;		/* priority, negative is high */
 	char	p_sig;		/* signal number sent to this process */
 	char	p_uid;		/* user id, used to direct tty signals */
 	char	p_time;		/* resident time for scheduling */
 	char	p_cpu;		/* cpu usage for scheduling */
-	char	p_nice;		/* nice for scheduling */
+	char	p_nice;		/* nice for scheduling, default value is 0 */
 	int	p_ttyp;		/* controlling tty */
 	int	p_pid;		/* unique process id */
 	int	p_ppid;		/* process id of parent */
@@ -24,10 +24,11 @@ struct	proc
 	int	p_wchan;	/* event process is awaiting */
 	int	*p_textp;	/* pointer to text structure */
 } proc[NPROC];
+/* use NPROC to define the maximum concurrent processes in the system */
 
 /* stat codes */
-#define	SSLEEP	1		/* sleeping on high priority */
-#define	SWAIT	2		/* sleeping on low priority */
+#define	SSLEEP	1		/* sleeping on high priority(which the priority is negative) */
+#define	SWAIT	2		/* sleeping on low priority(which the priority is zero or positive) */
 #define	SRUN	3		/* running */
 #define	SIDL	4		/* intermediate state in process creation */
 #define	SZOMB	5		/* intermediate state in process termination */
