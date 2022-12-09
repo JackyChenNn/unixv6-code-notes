@@ -335,17 +335,22 @@ fork()
 
 	//将p1指向父进程的proc结构体
 	p1 = u.u_procp;
-	//从起始位置遍历proc[]寻找未使用的元素，找到后
+	//通过p2从起始位置遍历proc[]寻找未使用的元素，找到后
 	//将p2指向该元素，然后跳转到found。
 	for(p2 = &proc[0]; p2 < &proc[NPROC]; p2++)
 		if(p2->p_stat == NULL)
 			goto found;
+	//如果没找到可用元素，设置u_error code为11，跳转到out
 	u.u_error = EAGAIN;
 	goto out;
 
 found:
 	// 找到未使用的元素后，调用newproc()生成新的进程。
 	if(newproc()) {
+		/*
+		*	将用户进程的r0设定为父进程的proc.p_pid
+		*	以此作为系统调用fork对子进程的返回值
+		*/
 		u.u_ar0[R0] = p1->p_pid;
 		u.u_cstime[0] = 0;
 		u.u_cstime[1] = 0;
@@ -355,9 +360,14 @@ found:
 		u.u_utime = 0;
 		return;
 	}
+	/*
+	*	将父进程的r0设为子进程的proc.p_pid
+	*	以此作为系统调用fork对父进程的返回值
+	*/
 	u.u_ar0[R0] = p2->p_pid;
 
 out:
+	//跳到下一语句 "bec 2f"(fork.s)
 	u.u_ar0[R7] =+ 2;
 }
 

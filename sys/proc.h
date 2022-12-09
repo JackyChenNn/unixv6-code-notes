@@ -26,7 +26,7 @@ struct	proc
 } proc[NPROC];
 /* use NPROC to define the maximum concurrent processes in the system */
 
-/* stat codes */
+/* state codes */
 #define	SSLEEP	1		/* sleeping on high priority(which the priority is negative) */
 #define	SWAIT	2		/* sleeping on low priority(which the priority is zero or positive) */
 #define	SRUN	3		/* running */
@@ -35,7 +35,7 @@ struct	proc
 #define	SSTOP	6		/* process being traced */
 
 /* flag codes */
-#define	SLOAD	01		/* in core */
+#define	SLOAD	01		/* process image is in memory */
 #define	SSYS	02		/* scheduling process */
 #define	SLOCK	04		/* process cannot be swapped */
 #define	SSWAP	010		/* process is being swapped out */

@@ -352,7 +352,9 @@ newproc()
 {
 	int a1, a2;
 	struct proc *p, *up;
+	//通常指向子进程
 	register struct proc *rpp;
+	//通常指向父进程
 	register *rip, n;
 
 	p = NULL;
@@ -363,14 +365,25 @@ newproc()
 	 * checked for the existence of a slot.
 	 */
 retry:
+	//新建进程id
 	mpid++;
+	/* 
+	*	由于mpid是int型变量，随着值不断增加，最高位的符号位最终会被置1
+	*	导致出现负数（当时c语言还不存在unsigned型定义）
+	*/
 	if(mpid < 0) {
 		mpid = 0;
 		goto retry;
 	}
+	/*
+	*	在proc[]中寻找是否有未使用的元素
+	*	如果有，用p记录首个可用的元素地址
+	*	如果没有，则执行panic()停止系统运行
+	*/
 	for(rpp = &proc[0]; rpp < &proc[NPROC]; rpp++) {
 		if(rpp->p_stat == NULL && p==NULL)
 			p = rpp;
+		// 检查proc[]各个元素成员变量，如果某个进程id与子进程新建的id相同
 		if (rpp->p_pid==mpid)
 			goto retry;
 	}
@@ -380,44 +393,61 @@ retry:
 	/*
 	 * make proc entry for new proc
 	 */
-
+	// 从u.u_procp中取得proc[]中代表执行进程（父进程）的元素
 	rip = u.u_procp;
 	up = rip;
+	// 可执行状态
 	rpp->p_stat = SRUN;
+	// 位于内存中
 	rpp->p_flag = SLOAD;
 	rpp->p_uid = rip->p_uid;
 	rpp->p_ttyp = rip->p_ttyp;
 	rpp->p_nice = rip->p_nice;
 	rpp->p_textp = rip->p_textp;
+	// 分配id
 	rpp->p_pid = mpid;
 	rpp->p_ppid = rip->p_pid;
+	// 执行时间设为0
 	rpp->p_time = 0;
 
 	/*
 	 * make duplicate entries
 	 * where needed
 	 */
-
+	// 由于子进程继承了父进程打开的文件，因此将这些文件的参照计数器都加1
 	for(rip = &u.u_ofile[0]; rip < &u.u_ofile[NOFILE];)
 		if((rpp = *rip++) != NULL)
 			rpp->f_count++;
+	// 由于子进程与父进程指向text[]中相同的元素，因此元素的参照计数器也得加上1
 	if((rpp=up->p_textp) != NULL) {
 		rpp->x_count++;
 		rpp->x_ccount++;
 	}
+	// 由于子进程继承了当前目录数据，因此inode[]中对应此目录的元素参照计数器也得加1
 	u.u_cdir->i_count++;
 	/*
 	 * Partially simulate the environment
 	 * of the new process so that when it is actually
 	 * created (by copying) it will look right.
 	 */
+	//调用savu(),将r5、r6的值暂存到user.u_rsav
 	savu(u.u_rsav);
 	rpp = p;
+	/*
+	*	暂时将父进程的user.u_procp指向proc[]中代表子进程的元素
+	*	相当于为子进程构造了一份与父进程完全相同，但又独属于子进程
+	*	自身的数据段
+	*/
 	u.u_procp = rpp;
+	// up是指向父进程proc结构体的指针
 	rip = up;
+	// 父进程数据段的长度
 	n = rip->p_size;
+	// 保存父进程数据段的物理地址
 	a1 = rip->p_addr;
+	// 将子进程数据段长度设置为父进程数据段的长度
 	rpp->p_size = n;
+	// 用malloc尝试分配一块与父进程数据段相同长度的内存
 	a2 = malloc(coremap, n);
 	/*
 	 * If there is not enough core for the
@@ -425,20 +455,29 @@ retry:
 	 * copy.
 	 */
 	if(a2 == NULL) {
-		rip->p_stat = SIDL;
-		rpp->p_addr = a1;
-		savu(u.u_ssav);
-		xswap(rpp, 0, 0);
+		/*
+		*	分配内存失败
+		*	如果内存没有足够空间，父进程的数据段会被
+		*	复制到交换空间（作为子进程的数据段），待
+		*	数据从交换空间换入内存时再对其进行分配内存
+		*/
+		rip->p_stat = SIDL;	//不会被执行，也不会被换出
+		rpp->p_addr = a1;	//将子进程的数据段地址设为父进程的数据段地址
+		savu(u.u_ssav);		//执行savu，将r5, r6的值暂存到u.u_ssav
+		xswap(rpp, 0, 0);	//将数据从内存换到交换区，父进程的数据段为处理对象
 		rpp->p_flag =| SSWAP;
 		rip->p_stat = SRUN;
 	} else {
 	/*
 	 * There is core, so just copy.
 	 */
+	 //将子进程的数据段地址设置为通过malloc()取得的内存区域的物理地址
 		rpp->p_addr = a2;
+		//从父进程向子进程复制数据段
 		while(n--)
 			copyseg(a1++, a2++);
 	}
+	//将父进程的user.u_procp恢复原状后返回0
 	u.u_procp = rip;
 	return(0);
 }
