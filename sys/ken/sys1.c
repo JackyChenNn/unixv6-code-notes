@@ -35,13 +35,28 @@ exec()
 	 * for execute permission
 	 */
 
+	/*
+	 * get the element of the file corresponding to the inode[]
+	 * through the path of the program execution file specified
+	 * by the user as a parameter.
+	 * If the user specifies a file path that does not exist, or
+	 * does not have permission to access the file, namei() will
+	 * return NULL.
+	 */
 	ip = namei(&uchar, 0);
 	if(ip == NULL)
 		return;
+	// Confirm that the number of processes executing exec() is less than NEXEC
 	while(execnt >= NEXEC)
+		// if greater or equal than, sleep()
 		sleep(&execnt, EXPRI);
+		// until smaller than NEXEC
+	// the number of processes executing exec() increase 1
 	execnt++;
+	// get block device buffers that have not been allocated to other block devices
 	bp = getblk(NODEV);
+	// execute access() to check the execution permission of the program file
+	// determine the file is not a special file.
 	if(access(ip, IEXEC) || (ip->i_mode&IFMT)!=0)
 		goto bad;
 
@@ -49,29 +64,46 @@ exec()
 	 * pack up arguments into
 	 * allocated disk buffer
 	 */
-
+	// Set cp to the address of the buffer data area
+	// clear na: number of parameters
+	// nc: total number of bytes of parameters
 	cp = bp->b_addr;
 	na = 0;
 	nc = 0;
+	/*
+	 * The parameters passed to the program by the user are processed in turn.
+	 * fuuword() is the data of 1 word length copied from the virtual address
+	 * space shown in the previous mode to the virtual address space shown in 
+	 * the current mode.
+	 */
 	while(ap = fuword(u.u_arg[1])) {
+		// when the while loop ended, the amount of parameters = na
 		na++;
+		// fuword failed, return -1
 		if(ap == -1)
 			goto bad;
+		// read the next parameter
 		u.u_arg[1] =+ 2;
+		// Store parameters into the buffer sequentially in bytes
 		for(;;) {
 			c = fubyte(ap++);
 			if(c == -1)
 				goto bad;
 			*cp++ = c;
+			// after the loop, the total bytes of parameters = nc
 			nc++;
+			// the length of buffer area is only 512 bytes.
 			if(nc > 510) {
 				u.u_error = E2BIG;
 				goto bad;
 			}
+			// parameters ending with 0(NULL)
 			if(c == 0)
 				break;
 		}
 	}
+	// when nc is odd, add 1 byte to buffer area
+	// let the length of data become even
 	if((nc&1) != 0) {
 		*cp++ = 0;
 		nc++;
@@ -120,6 +152,8 @@ exec()
 
 	ts = ((u.u_arg[1]+63)>>6) & 01777;
 	ds = ((u.u_arg[2]+u.u_arg[3]+63)>>6) & 01777;
+	// Update user APR and userspace
+	// SSIZE is initial length of stack area
 	if(estabur(ts, ds, SSIZE, sep))
 		goto bad;
 
@@ -130,9 +164,13 @@ exec()
 	 */
 
 	u.u_prof[3] = 0;
+	// release the currently used code segment
 	xfree();
+	// shrink the data segment to the same length as the user[]
 	expand(USIZE);
+	// allocate the memory used by the code segment
 	xalloc(ip);
+	// ensure the data area
 	c = USIZE+ds+SSIZE;
 	expand(c);
 	while(--c >= USIZE)
@@ -141,11 +179,14 @@ exec()
 	/*
 	 * read in data segment
 	 */
-
+	// Change the starting position of the data area of the process
+	// to the position where the virtual address is 0.
 	estabur(0, ds, 0, 0);
 	u.u_base = 0;
+	// 020: the length of the program file header.
 	u.u_offset[1] = 020+u.u_arg[1];
 	u.u_count = u.u_arg[2];
+	// read the program into the data area of the process
 	readi(ip);
 
 	/*
@@ -156,18 +197,28 @@ exec()
 	u.u_dsize = ds;
 	u.u_ssize = SSIZE;
 	u.u_sep = sep;
+	// xxecute estabur() to finalize the user space.
 	estabur(u.u_tsize, u.u_dsize, u.u_ssize, u.u_sep);
+	// transfer the parameters saved in the buffer to the stack area
+	// set cp as the address of the data area of the buffer.
 	cp = bp->b_addr;
+	// calculate the address of the stack pointer
 	ap = -nc - na*2 - 4;
+	// set it as the sp of the user process.
 	u.u_ar0[R6] = ap;
+	// na: the number of parameters
+	// -> to the user space address pointer.
 	suword(ap, na);
+	// set c to the user space address where the parameter is saved
 	c = -nc;
+	// store parameters and addresses in the stack area
 	while(na--) {
 		suword(ap=+2, c);
 		do
 			subyte(c++, *cp);
 		while(*cp++);
 	}
+	// set the next address of the parameter address to -1
 	suword(ap+2, -1);
 
 	/*
@@ -187,22 +238,30 @@ exec()
 	/*
 	 * clear sigs, regs and return
 	 */
-
+	// If the value of u.u_signal[n] is an even number,
+	// it will be cleared to 0, if it is an odd number,
+	// the original data will be retained.
 	c = ip;
 	for(ip = &u.u_signal[0]; ip < &u.u_signal[NSIG]; ip++)
 		if((*ip & 1) == 0)
 			*ip = 0;
+	// clear the values of r0~r5 and r7 of the user process to 0
 	for(cp = &regloc[0]; cp < &regloc[6];)
 		u.u_ar0[*cp++] = 0;
 	u.u_ar0[R7] = 0;
+	// clear the registers for floating-point arithmetic to 0.
 	for(ip = &u.u_fsav[0]; ip < &u.u_fsav[25];)
 		*ip++ = 0;
 	ip = c;
 
 bad:
+	// decrement the reference counter of the element in the inode[]
+	// representing the program execution file by 1
 	iput(ip);
+	// free the buffer used for parameter processing.
 	brelse(bp);
 	if(execnt >= NEXEC)
+		// wake up other processes waiting to enter exec() processing.
 		wakeup(&execnt);
 	execnt--;
 }
